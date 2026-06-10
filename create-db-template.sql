@@ -1,0 +1,25 @@
+CREATE DATABASE chatroom_db;
+
+USE chatroom_db;
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE rooms (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    room_id VARCHAR(100) UNIQUE NOT NULL,
+    room_name VARCHAR(100) NOT NULL,
+    owner_username VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE messages (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    room_id VARCHAR(100),
+    sender VARCHAR(50),
+    content TEXT,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
