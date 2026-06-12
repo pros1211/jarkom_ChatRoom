@@ -3,6 +3,8 @@ com\example\App$2.class
 com\example\models\Room.class
 com\example\App$1.class
 com\example\views\LobbyView.class
+com\example\views\CreateRoomDialog$RoomResult.class
+com\example\models\RoomInfo.class
 com\example\views\CreateRoomDialog.class
 com\example\protocol\Packet.class
 com\example\App$HistoryMessage.class

@@ -14,13 +14,14 @@ import javafx.scene.text.FontWeight;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignL;
 
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 public class LoginView extends VBox {
     private final TextField usernameField;
+    private final TextField ipField;
     private final Button loginBtn;
 
-    public LoginView(Consumer<String> onLogin) {
+    public LoginView(BiConsumer<String, String> onLogin) {
         setSpacing(20);
         setAlignment(Pos.CENTER);
         setPadding(new Insets(50));
@@ -29,7 +30,11 @@ public class LoginView extends VBox {
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 32));
         
         Label subTitle = new Label("Silahkan masuk untuk mulai chatting");
+
         subTitle.getStyleClass().add("text-muted");
+        ipField = new TextField();
+        ipField.setPromptText("Masukkan IP Server...");
+        ipField.setMaxWidth(300);
 
         usernameField = new TextField();
         usernameField.setPromptText("Masukkan Username...");
@@ -41,12 +46,16 @@ public class LoginView extends VBox {
         loginBtn.setPrefWidth(300);
 
         loginBtn.setOnAction(e -> {
-            String username = usernameField.getText();
+            String username = usernameField.getText().trim();
+            String ip = ipField.getText().trim();
+            if (ip.isEmpty()) {
+                ip = "localhost"; 
+            }
             if (!username.isEmpty()) {
-                onLogin.accept(username);
+                onLogin.accept(username, ip);
             }
         });
 
-        getChildren().addAll(titleLabel, subTitle, usernameField, loginBtn);
+        getChildren().addAll(titleLabel, subTitle, usernameField, ipField, loginBtn);
     }
 }

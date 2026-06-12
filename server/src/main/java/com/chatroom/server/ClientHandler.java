@@ -52,6 +52,7 @@ public class ClientHandler implements Runnable {
     @Override
     public void run() {
         try {
+            server.registerClient(this);
             socket.setTcpNoDelay(true);
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
@@ -75,6 +76,7 @@ public class ClientHandler implements Runnable {
                 socket.close();
             } catch (Exception ignored) {
             }
+            server.unregisterClient(this);
         }
     }
 
@@ -183,7 +185,12 @@ public class ClientHandler implements Runnable {
     }
 
     private void broadcastGlobalRoomList() {
-        // RoomManager belum menyimpan daftar semua client yang sedang online.
+        Packet listPacket = new Packet(MessageType.ROOM_LIST);
+        listPacket.setMessage(buildRoomListData());
+
+        for (ClientHandler client : server.getClients()) {
+            client.sendPacket(listPacket);
+        }
     }
 
     private void handleJoinRoom(Packet packet) {
@@ -325,7 +332,14 @@ public class ClientHandler implements Runnable {
         }
 
         server.getRoomManager().deleteRoom(currentRoomId);
+        broadcastGlobalRoomList();
         currentRoomId = null;
+    }
+
+    private String buildRoomListData() {
+        return server.getRoomManager().getRooms().values().stream()
+                .map(r -> r.getRoomId() + ":" + r.getRoomName() + ":" + r.getOwnerName() + ":" + r.getMaxMembers())
+                .collect(Collectors.joining(","));
     }
 
     private void handleTypingStatus(Packet packet) {

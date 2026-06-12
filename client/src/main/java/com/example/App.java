@@ -6,9 +6,9 @@ import com.example.network.ChatClient;
 import com.example.protocol.MessageType;
 import com.example.protocol.Packet;
 import com.example.views.ChatView;
+import com.example.views.CreateRoomDialog;
 import com.example.views.LobbyView;
 import com.example.views.LoginView;
-import com.example.views.CreateRoomDialog;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import javafx.application.Application;
@@ -41,6 +41,7 @@ public class App extends Application {
     private ChatView chatView;
     private final Gson gson = new Gson();
     private final Map<String, IncomingFile> incomingFiles = new HashMap<>();
+    private Room currentRoom;
     private Room pendingRoom;
 
     @Override
@@ -55,9 +56,9 @@ public class App extends Application {
     }
 
     private void showLogin() {
-        LoginView loginView = new LoginView(username -> {
+        LoginView loginView = new LoginView((username, ip) -> {
             this.currentUser = username;
-            chatClient.connect("localhost", 5000, () -> {
+            chatClient.connect(ip, 5000, () -> {
                 Packet loginPacket = new Packet(MessageType.LOGIN);
                 loginPacket.setUsername(username);
                 chatClient.sendPacket(loginPacket);
@@ -73,15 +74,15 @@ public class App extends Application {
 
     private void showLobby() {
         this.lobbyView = new LobbyView(
-            currentUser,
-            room -> {
-                this.pendingRoom = room;
-                Packet joinPacket = new Packet(MessageType.JOIN_ROOM);
-                joinPacket.setRoomId(room.getRoomId());
-                chatClient.sendPacket(joinPacket);
-            },
-            this::handleCreateRoom,
-            () -> chatClient.sendPacket(new Packet(MessageType.GET_ROOMS))
+                currentUser,
+                room -> {
+                    this.pendingRoom = room;
+                    Packet joinPacket = new Packet(MessageType.JOIN_ROOM);
+                    joinPacket.setRoomId(room.getRoomId());
+                    chatClient.sendPacket(joinPacket);
+                },
+                this::handleCreateRoom,
+                () -> chatClient.sendPacket(new Packet(MessageType.GET_ROOMS))
         );
         primaryStage.setScene(new Scene(lobbyView, 900, 600));
         primaryStage.setTitle("ChatApp - Lobby");
@@ -101,22 +102,20 @@ public class App extends Application {
         });
     }
 
-    private Room currentRoom;
-
     private void showChat(Room room) {
         this.currentRoom = room;
         this.chatView = new ChatView(
-            room,
-            currentUser,
-            () -> {
-                chatClient.sendPacket(new Packet(MessageType.LEAVE_ROOM));
-                showLobby();
-            },
-            () -> {
-                Packet deletePacket = new Packet(MessageType.DELETE_ROOM);
-                deletePacket.setRoomId(room.getRoomId());
-                chatClient.sendPacket(deletePacket);
-            }
+                room,
+                currentUser,
+                () -> {
+                    chatClient.sendPacket(new Packet(MessageType.LEAVE_ROOM));
+                    showLobby();
+                },
+                () -> {
+                    Packet deletePacket = new Packet(MessageType.DELETE_ROOM);
+                    deletePacket.setRoomId(room.getRoomId());
+                    chatClient.sendPacket(deletePacket);
+                }
         );
 
         chatView.setOnSendMessage(text -> {
@@ -293,6 +292,7 @@ public class App extends Application {
                         chatView.addMessage("Sistem", packet.getMessage(), false);
                     }
                     break;
+
                 case USER_LEFT:
                     if (currentRoom != null && chatView != null) {
                         currentRoom.getParticipants().remove(packet.getUsername());
@@ -311,11 +311,17 @@ public class App extends Application {
                     new Alert(Alert.AlertType.INFORMATION, packet.getMessage()).show();
                     showLobby();
                     break;
+
                 case TYPING_STATUS:
-                    if (chatView != null) chatView.setPlayerTyping(packet.getUsername(), packet.isTyping());
+                    if (chatView != null) {
+                        chatView.setPlayerTyping(packet.getUsername(), packet.isTyping());
+                    }
                     break;
+
                 case USER_PRESENCE:
-                    if (chatView != null) chatView.refreshParticipants();
+                    if (chatView != null) {
+                        chatView.refreshParticipants();
+                    }
                     break;
             }
         });

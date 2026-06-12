@@ -1,1 +1,16 @@
+com\chatroom\DummyClientCreateRoom.class
+com\chatroom\TestRoom.class
+com\chatroom\MessageTypeTest.class
+com\chatroom\ClientTest1.class
+com\chatroom\CreateRoomTest.class
+com\chatroom\MessageTest.class
+com\chatroom\PacketTest.class
+com\chatroom\UserModelTest.class
+com\chatroom\ClientTest2.class
+com\chatroom\ChatTest.class
 com\chatroom\AppTest.class
+com\chatroom\ChatReceiver.class
+com\chatroom\JoinRoomTest.class
+com\chatroom\UserTest.class
+com\chatroom\DatabaseTest.class
+com\chatroom\DummyClientLoginTest.class

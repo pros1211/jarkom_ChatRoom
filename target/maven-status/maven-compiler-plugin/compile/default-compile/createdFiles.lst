@@ -1,1 +1,17 @@
+com\chatroom\server\ClientHandler$1.class
+com\chatroom\model\RoomInfo.class
+com\chatroom\server\ClientConnection.class
+com\chatroom\server\ClientHandler$IncomingFileUpload.class
+com\chatroom\server\ChatServer.class
+com\chatroom\model\Room.class
+com\chatroom\model\Message.class
+com\chatroom\protocol\MessageType.class
 com\chatroom\App.class
+com\chatroom\database\DatabaseManager$StoredFile.class
+com\chatroom\database\DatabaseManager.class
+com\chatroom\server\ServerLauncher.class
+com\chatroom\model\User.class
+com\chatroom\server\ChatRoom.class
+com\chatroom\server\ClientHandler.class
+com\chatroom\protocol\Packet.class
+com\chatroom\server\RoomManager.class

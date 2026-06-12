@@ -59,6 +59,7 @@ public class ClientHandler implements Runnable {
     public void run() {
 
         try {
+            server.registerClient(this);
 
             reader = new BufferedReader(
                     new InputStreamReader(
@@ -98,6 +99,13 @@ public class ClientHandler implements Runnable {
                     "Client disconnected: "
                             + e.getMessage());
             e.printStackTrace();
+            handleLeaveRoom();
+        } finally {
+            try {
+                socket.close();
+            } catch (Exception ignored) {
+            }
+            server.unregisterClient(this);
         }
     }
 
@@ -140,6 +148,22 @@ public class ClientHandler implements Runnable {
             case FILE_CHUNK:
                 handleFileChunk(packet);
                 break;
+
+            case TYPING_STATUS:
+                handleTypingStatus(packet);
+                break;
+
+            case USER_PRESENCE:
+                handleUserPresence(packet);
+                break;
+
+            case KICK_USER:
+                handleKickUser(packet);
+                break;
+
+            case DELETE_ROOM:
+                handleDeleteRoom(packet);
+                break;
         }
     }
 
@@ -169,7 +193,8 @@ public class ClientHandler implements Runnable {
 
         Map<String, ChatRoom> rooms = server.getRoomManager().getRooms();
         String roomListData = rooms.values().stream()
-                .map(room -> room.getRoomId() + ":" + room.getRoomName() + ":" + room.getOwnerName())
+                .map(room -> room.getRoomId() + ":" + room.getRoomName() + ":" + room.getOwnerName() + ":"
+                        + room.getMaxMembers())
                 .collect(Collectors.joining(","));
 
         Packet response = new Packet(MessageType.ROOM_LIST);
@@ -186,7 +211,8 @@ public class ClientHandler implements Runnable {
                         .addRoom(
                                 room.getRoomId(),
                                 room.getRoomName(),
-                                room.getOwner());
+                                room.getOwner(),
+                                room.getMaxMembers());
             }
         } catch (Exception e) {
             System.out.println(
@@ -198,10 +224,13 @@ public class ClientHandler implements Runnable {
     private void handleCreateRoom(
             Packet packet) {
 
+        int maxMembers = packet.getMaxMembers() > 0 ? packet.getMaxMembers() : 10;
+
         ChatRoom room = server.getRoomManager()
                 .createRoom(
                         packet.getRoomName(),
-                        username);
+                        username,
+                        maxMembers);
         System.out.println(
                 server.getRoomManager()
                         .getRooms()
@@ -221,6 +250,8 @@ public class ClientHandler implements Runnable {
 
         response.setRoomName(
                 room.getRoomName());
+        response.setMaxMembers(
+                room.getMaxMembers());
 
         sendPacket(response);
         sendMessageHistory(room.getRoomId());
@@ -243,16 +274,56 @@ public class ClientHandler implements Runnable {
         if (room == null)
             return;
 
+        if (!room.getMembers().contains(this) && room.isFull()) {
+            sendError(
+                    "Ruangan penuh. Maksimal "
+                            + room.getMaxMembers()
+                            + " peserta.");
+            return;
+        }
+
         room.addMember(this);
 
         currentRoomId = room.getRoomId();
+
+        Packet response = new Packet(
+                MessageType.JOIN_SUCCESS);
+        response.setRoomId(
+                room.getRoomId());
+        response.setRoomName(
+                room.getRoomName());
+        response.setUsername(
+                room.getOwnerName());
+        response.setMaxMembers(
+                room.getMaxMembers());
+        sendPacket(response);
+
         sendMessageHistory(room.getRoomId());
         sendFileHistory(room.getRoomId());
+        broadcastGlobalRoomList();
 
         System.out.println(
                 username
                         + " joined "
                         + room.getRoomName());
+    }
+
+    private void broadcastGlobalRoomList() {
+
+        Packet listPacket = new Packet(MessageType.ROOM_LIST);
+        listPacket.setMessage(buildRoomListData());
+
+        for (ClientHandler client : server.getClients()) {
+            client.sendPacket(listPacket);
+        }
+    }
+
+    private String buildRoomListData() {
+
+        return server.getRoomManager().getRooms().values().stream()
+                .map(room -> room.getRoomId() + ":" + room.getRoomName() + ":" + room.getOwnerName() + ":"
+                        + room.getMaxMembers())
+                .collect(Collectors.joining(","));
     }
 
     private void handleLeaveRoom() {
@@ -435,12 +506,95 @@ public class ClientHandler implements Runnable {
             databaseManager.saveRoom(
                     room.getRoomId(),
                     room.getRoomName(),
-                    username);
+                    room.getOwnerName(),
+                    room.getMaxMembers());
         } catch (Exception e) {
             System.out.println(
                     "Gagal menyimpan room ke database: "
                             + e.getMessage());
         }
+    }
+
+    private void handleKickUser(
+            Packet packet) {
+
+        if (currentRoomId == null)
+            return;
+
+        ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
+        if (room == null || !room.getOwnerName().equals(username))
+            return;
+
+        String target = packet.getTargetUser();
+        for (ClientHandler handler : room.getMembers()) {
+            if (handler.username != null && handler.username.equals(target)) {
+                Packet kickPacket = new Packet(MessageType.USER_KICKED);
+                kickPacket.setMessage("Anda telah dikeluarkan dari ruangan oleh owner.");
+                handler.sendPacket(kickPacket);
+                handler.handleLeaveRoom();
+                break;
+            }
+        }
+    }
+
+    private void handleDeleteRoom(
+            Packet packet) {
+
+        if (currentRoomId == null)
+            return;
+
+        ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
+        if (room == null || !room.getOwnerName().equals(username))
+            return;
+
+        Packet deleteNotify = new Packet(MessageType.ROOM_DELETED);
+        deleteNotify.setMessage("Ruangan telah ditutup oleh owner.");
+
+        for (ClientHandler handler : room.getMembers()) {
+            handler.sendPacket(deleteNotify);
+            handler.currentRoomId = null;
+        }
+
+        server.getRoomManager().getRooms().remove(currentRoomId);
+        broadcastGlobalRoomList();
+        currentRoomId = null;
+    }
+
+    private void handleTypingStatus(
+            Packet packet) {
+
+        if (currentRoomId == null)
+            return;
+
+        ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
+        if (room == null)
+            return;
+
+        Packet outgoing = new Packet(MessageType.TYPING_STATUS);
+        outgoing.setUsername(username);
+        outgoing.setTyping(packet.isTyping());
+
+        for (ClientHandler member : room.getMembers()) {
+            if (member != this) {
+                member.sendPacket(outgoing);
+            }
+        }
+    }
+
+    private void handleUserPresence(
+            Packet packet) {
+
+        if (currentRoomId == null)
+            return;
+
+        ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
+        if (room == null)
+            return;
+
+        Packet outgoing = new Packet(MessageType.USER_PRESENCE);
+        outgoing.setUsername(username);
+        outgoing.setOnline(packet.isOnline());
+        broadcast(room, outgoing);
     }
 
     private void saveMessageToDatabase(
