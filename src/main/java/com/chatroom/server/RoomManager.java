@@ -9,15 +9,17 @@ public class RoomManager {
     private final Map<String, ChatRoom> rooms = new ConcurrentHashMap<>();
 
     public ChatRoom createRoom(
-            String roomName) {
+            String roomName,
+            String ownerName) {
 
         String roomId = UUID.randomUUID()
                 .toString()
                 .substring(0, 8);
 
         ChatRoom room = new ChatRoom(
-                "ROOM001",
-                "Jarkom");
+                roomId,
+                roomName,
+                ownerName);
 
         rooms.put(
                 room.getRoomId(),

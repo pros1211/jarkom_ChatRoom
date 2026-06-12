@@ -23,6 +23,9 @@ public enum MessageType {
     FILE_MESSAGE,
     FILE_CHUNK,
 
+    TYPING_STATUS,
+    USER_PRESENCE,
+
     KICK_USER,
     USER_KICKED,
 

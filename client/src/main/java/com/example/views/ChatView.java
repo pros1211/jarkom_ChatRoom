@@ -31,18 +31,20 @@ import java.util.function.Consumer;
 public class ChatView extends BorderPane {
     private final VBox messageContainer;
     private final TextField messageField;
+    private final Label typingLabel;
     private final String currentUser;
     private final Room room;
 
     private final VBox userListContainer;
     private Consumer<String> onKickUser;
     private Consumer<File> onSendFile;
+    private Consumer<Boolean> onTypingStatus;
 
     public ChatView(Room room, String username, Runnable onBack, Runnable onCloseRoom) {
         this.room = room;
         this.currentUser = username;
 
-        // ... (Header and other code)
+        // --- 1. Header ---
         HBox header = new HBox(15);
         header.setPadding(new Insets(10, 20, 10, 20));
         header.setAlignment(Pos.CENTER_LEFT);
@@ -51,10 +53,9 @@ public class ChatView extends BorderPane {
         Button backBtn = new Button();
         backBtn.setGraphic(new FontIcon(MaterialDesignA.ARROW_LEFT));
         backBtn.getStyleClass().add("flat");
-        backBtn.setStyle("-fx-text-fill: #007AFF;"); // iOS Blue
+        backBtn.setStyle("-fx-text-fill: #007AFF;");
         backBtn.setOnAction(e -> onBack.run());
 
-        // Center Info
         VBox titleInfo = new VBox(0);
         titleInfo.setAlignment(Pos.CENTER);
         Label roomTitle = new Label(room.getName());
@@ -70,7 +71,6 @@ public class ChatView extends BorderPane {
 
         header.getChildren().addAll(backBtn, spacerL, titleInfo, spacerR);
 
-        // Owner/Leave Action
         if (room.isOwner(currentUser)) {
             Button closeBtn = new Button();
             closeBtn.setGraphic(new FontIcon(MaterialDesignD.DELETE));
@@ -80,13 +80,13 @@ public class ChatView extends BorderPane {
         } else {
             Button leaveBtn = new Button("Keluar");
             leaveBtn.getStyleClass().add("flat");
-            leaveBtn.setStyle("-fx-text-fill: #FF3B30;"); // iOS Red
+            leaveBtn.setStyle("-fx-text-fill: #FF3B30;");
             leaveBtn.setOnAction(e -> onBack.run());
             header.getChildren().add(leaveBtn);
         }
 
         // --- 2. Chat Area ---
-        messageContainer = new VBox(8); // Tighter spacing like iMessage
+        messageContainer = new VBox(8);
         messageContainer.setPadding(new Insets(20));
         messageContainer.setStyle("-fx-background-color: #ffffff;");
         
@@ -97,7 +97,14 @@ public class ChatView extends BorderPane {
         scrollPane.setStyle("-fx-background-color: transparent; -fx-background: #ffffff;");
         messageContainer.heightProperty().addListener((obs, oldHeight, newHeight) -> scrollPane.setVvalue(1.0));
 
-        // --- 3. Input Area (iMessage Pill Style) ---
+        // Typing Label
+        typingLabel = new Label("");
+        typingLabel.setStyle("-fx-text-fill: #8e8e93; -fx-font-size: 11px; -fx-italic: true; -fx-padding: 0 20 5 20;");
+
+        VBox centerContent = new VBox(scrollPane, typingLabel);
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+
+        // --- 3. Input Area ---
         HBox inputWrapper = new HBox(10);
         inputWrapper.setPadding(new Insets(10, 20, 20, 20));
         inputWrapper.setAlignment(Pos.CENTER);
@@ -113,6 +120,13 @@ public class ChatView extends BorderPane {
         messageField.setPromptText("iMessage");
         messageField.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 5;");
         HBox.setHgrow(messageField, Priority.ALWAYS);
+        
+        // Typing Status Listener
+        messageField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (onTypingStatus != null) {
+                onTypingStatus.accept(!newVal.isEmpty());
+            }
+        });
 
         Button fileBtn = new Button("File");
         fileBtn.getStyleClass().add("flat");
@@ -147,7 +161,7 @@ public class ChatView extends BorderPane {
         userSidebar.getChildren().addAll(userSidebarTitle, userListContainer);
 
         setTop(header);
-        setCenter(scrollPane);
+        setCenter(centerContent);
         setBottom(inputWrapper);
         setRight(userSidebar);
 
@@ -162,6 +176,26 @@ public class ChatView extends BorderPane {
         this.onSendFile = onSendFile;
     }
 
+    public void setOnTypingStatus(Consumer<Boolean> onTypingStatus) {
+        this.onTypingStatus = onTypingStatus;
+    }
+
+    private java.util.Set<String> typingUsers = new java.util.HashSet<>();
+    public void setPlayerTyping(String username, boolean isTyping) {
+        if (isTyping) typingUsers.add(username);
+        else typingUsers.remove(username);
+        
+        javafx.application.Platform.runLater(() -> {
+            if (typingUsers.isEmpty()) {
+                typingLabel.setText("");
+            } else if (typingUsers.size() == 1) {
+                typingLabel.setText(typingUsers.iterator().next() + " sedang mengetik...");
+            } else {
+                typingLabel.setText(typingUsers.size() + " orang sedang mengetik...");
+            }
+        });
+    }
+
     public void refreshParticipants() {
         userListContainer.getChildren().clear();
         for (String participant : room.getParticipants()) {
@@ -173,18 +207,23 @@ public class ChatView extends BorderPane {
             avatar.setPrefSize(30, 30);
             avatar.setStyle("-fx-background-color: #e1e1e1; -fx-background-radius: 15; -fx-font-size: 12px; -fx-font-weight: bold;");
             
+            // Indikator Online (Dot)
+            Circle statusDot = new Circle(4);
+            statusDot.setFill(Color.web("#34C759")); // Default Hijau (Online)
+            
             Label pLabel = new Label(participant + (participant.equals(currentUser) ? " (Anda)" : ""));
             pLabel.setStyle("-fx-font-size: 13px;");
             
             Region pSpacer = new Region();
             HBox.setHgrow(pSpacer, Priority.ALWAYS);
             
-            userRow.getChildren().addAll(avatar, pLabel, pSpacer);
+            userRow.getChildren().addAll(avatar, statusDot, pLabel, pSpacer);
 
             if (room.isOwner(currentUser) && !participant.equals(currentUser)) {
                 Button kickBtn = new Button();
-                kickBtn.setGraphic(new FontIcon(MaterialDesignA.ACCOUNT_REMOVE));
+                kickBtn.setGraphic(new FontIcon(MaterialDesignS.SHIELD_REMOVE_OUTLINE));
                 kickBtn.getStyleClass().addAll("flat", "danger");
+                kickBtn.setStyle("-fx-padding: 0;");
                 kickBtn.setOnAction(e -> {
                     if (onKickUser != null) onKickUser.accept(participant);
                 });
@@ -195,7 +234,6 @@ public class ChatView extends BorderPane {
     }
 
     private Consumer<String> onSendMessage;
-
     public void setOnSendMessage(Consumer<String> onSendMessage) {
         this.onSendMessage = onSendMessage;
     }
@@ -243,28 +281,15 @@ public class ChatView extends BorderPane {
         contentLabel.setPadding(new Insets(8, 14, 8, 14));
 
         HBox wrapper = new HBox(contentLabel);
-        
         if (isSelf) {
             wrapper.setAlignment(Pos.CENTER_RIGHT);
-            contentLabel.setStyle(
-                "-fx-background-color: #007AFF;" +
-                "-fx-text-fill: white;" +
-                "-fx-background-radius: 18 18 2 18;" +
-                "-fx-font-size: 14px;"
-            );
+            contentLabel.setStyle("-fx-background-color: #007AFF; -fx-text-fill: white; -fx-background-radius: 18 18 2 18; -fx-font-size: 14px;");
         } else {
             wrapper.setAlignment(Pos.CENTER_LEFT);
-            // Tambahkan nama pengirim di atas bubble untuk grup chat
             Label nameLabel = new Label(sender);
             nameLabel.setStyle("-fx-text-fill: #8e8e93; -fx-font-size: 10px; -fx-padding: 0 0 0 5;");
             bubbleWrapper.getChildren().add(nameLabel);
-            
-            contentLabel.setStyle(
-                "-fx-background-color: #E9E9EB;" +
-                "-fx-text-fill: black;" +
-                "-fx-background-radius: 18 18 18 2;" +
-                "-fx-font-size: 14px;"
-            );
+            contentLabel.setStyle("-fx-background-color: #E9E9EB; -fx-text-fill: black; -fx-background-radius: 18 18 18 2; -fx-font-size: 14px;");
         }
 
         bubbleWrapper.getChildren().add(wrapper);
@@ -276,16 +301,12 @@ public class ChatView extends BorderPane {
             addMessage("Sistem", "File dari " + sender + " kosong atau rusak.", false);
             return;
         }
-
-        byte[] bytes;
         try {
-            bytes = Base64.getDecoder().decode(fileData);
+            byte[] bytes = Base64.getDecoder().decode(fileData);
+            addFileMessage(sender, fileName, fileMimeType, fileSize, bytes, isSelf);
         } catch (IllegalArgumentException e) {
             addMessage("Sistem", "File dari " + sender + " gagal dibaca.", false);
-            return;
         }
-
-        addFileMessage(sender, fileName, fileMimeType, fileSize, bytes, isSelf);
     }
 
     public void addFileMessage(String sender, String fileName, String fileMimeType, long fileSize, byte[] bytes, boolean isSelf) {
@@ -307,9 +328,7 @@ public class ChatView extends BorderPane {
         fileCard.getChildren().addAll(fileTitle, fileMeta);
 
         Node preview = createFilePreview(safeFileName, safeMimeType, bytes);
-        if (preview != null) {
-            fileCard.getChildren().add(preview);
-        }
+        if (preview != null) fileCard.getChildren().add(preview);
 
         Button downloadBtn = new Button("Download");
         downloadBtn.setMaxWidth(Double.MAX_VALUE);
@@ -319,10 +338,7 @@ public class ChatView extends BorderPane {
         HBox wrapper = new HBox(fileCard);
         if (isSelf) {
             wrapper.setAlignment(Pos.CENTER_RIGHT);
-            fileCard.setStyle(
-                "-fx-background-color: #007AFF;" +
-                "-fx-background-radius: 18 18 2 18;"
-            );
+            fileCard.setStyle("-fx-background-color: #007AFF; -fx-background-radius: 18 18 2 18;");
             fileTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: white;");
             fileMeta.setStyle("-fx-font-size: 11px; -fx-text-fill: #d8ecff;");
         } else {
@@ -330,10 +346,7 @@ public class ChatView extends BorderPane {
             Label nameLabel = new Label(sender);
             nameLabel.setStyle("-fx-text-fill: #8e8e93; -fx-font-size: 10px; -fx-padding: 0 0 0 5;");
             bubbleWrapper.getChildren().add(nameLabel);
-            fileCard.setStyle(
-                "-fx-background-color: #E9E9EB;" +
-                "-fx-background-radius: 18 18 18 2;"
-            );
+            fileCard.setStyle("-fx-background-color: #E9E9EB; -fx-background-radius: 18 18 18 2;");
         }
 
         bubbleWrapper.getChildren().add(wrapper);
@@ -341,27 +354,18 @@ public class ChatView extends BorderPane {
     }
 
     private Node createFilePreview(String fileName, String fileMimeType, byte[] bytes) {
-        if (fileMimeType == null) {
-            return new Label("Preview tidak tersedia.");
-        }
-
+        if (fileMimeType == null) return null;
         if (fileMimeType.startsWith("image/")) {
             Image image = new Image(new ByteArrayInputStream(bytes), 320, 220, true, true);
             ImageView imageView = new ImageView(image);
             imageView.setFitWidth(320);
             imageView.setPreserveRatio(true);
-            imageView.setSmooth(true);
             return imageView;
         }
-
         if (fileMimeType.startsWith("video/") || fileMimeType.startsWith("audio/")) {
             return createMediaPreview(fileName, bytes, fileMimeType.startsWith("video/"));
         }
-
-        Label placeholder = new Label("Preview tidak tersedia untuk tipe file ini.");
-        placeholder.setWrapText(true);
-        placeholder.setStyle("-fx-font-size: 12px; -fx-text-fill: #6e6e73;");
-        return placeholder;
+        return null;
     }
 
     private Node createMediaPreview(String fileName, byte[] bytes, boolean video) {
@@ -370,7 +374,6 @@ public class ChatView extends BorderPane {
             File tempFile = Files.createTempFile("chatapp-", getFileExtension(fileName)).toFile();
             Files.write(tempFile.toPath(), bytes);
             tempFile.deleteOnExit();
-
             Media media = new Media(tempFile.toURI().toString());
             MediaPlayer mediaPlayer = new MediaPlayer(media);
             Button playBtn = new Button("Play");
@@ -383,100 +386,45 @@ public class ChatView extends BorderPane {
                     playBtn.setText("Pause");
                 }
             });
-
-            mediaPlayer.setOnEndOfMedia(() -> {
-                mediaPlayer.stop();
-                playBtn.setText("Play");
-            });
-
             if (video) {
                 MediaView mediaView = new MediaView(mediaPlayer);
                 mediaView.setFitWidth(320);
-                mediaView.setFitHeight(180);
                 mediaView.setPreserveRatio(true);
                 mediaBox.getChildren().add(mediaView);
             }
-
             mediaBox.getChildren().add(playBtn);
             return mediaBox;
-        } catch (IOException | RuntimeException e) {
-            Label errorLabel = new Label("Preview media tidak bisa dibuka.");
-            errorLabel.setWrapText(true);
-            errorLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #6e6e73;");
-            return errorLabel;
+        } catch (Exception e) {
+            return new Label("Media preview unavailable.");
         }
     }
 
     private void saveFile(String fileName, byte[] bytes) {
-        String safeFileName = sanitizeFileName(fileName);
-        String extension = getFileExtension(safeFileName);
-
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Simpan file");
-        fileChooser.setInitialFileName(safeFileName);
-        if (!extension.equals(".tmp")) {
-            fileChooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter(extension.substring(1).toUpperCase() + " File", "*" + extension)
-            );
-        }
-        fileChooser.getExtensionFilters().add(
-            new FileChooser.ExtensionFilter("Semua File", "*.*")
-        );
-
+        fileChooser.setInitialFileName(sanitizeFileName(fileName));
         File destination = fileChooser.showSaveDialog(getScene().getWindow());
-        if (destination == null) {
-            return;
-        }
-
-        File targetFile = ensureOriginalExtension(destination, extension);
-        try {
-            Files.write(targetFile.toPath(), bytes);
-        } catch (IOException e) {
-            Alert alert = new Alert(Alert.AlertType.ERROR, "Gagal menyimpan file: " + e.getMessage());
-            alert.show();
+        if (destination != null) {
+            try {
+                Files.write(destination.toPath(), bytes);
+            } catch (IOException e) {
+                new Alert(Alert.AlertType.ERROR, "Gagal menyimpan file.").show();
+            }
         }
     }
 
     private String formatFileSize(long bytes) {
-        if (bytes < 1024) {
-            return bytes + " B";
-        }
-
-        double kb = bytes / 1024.0;
-        if (kb < 1024) {
-            return String.format("%.1f KB", kb);
-        }
-
-        double mb = kb / 1024.0;
-        return String.format("%.1f MB", mb);
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
     private String getFileExtension(String fileName) {
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex >= 0 && dotIndex < fileName.length() - 1) {
-            return fileName.substring(dotIndex);
-        }
-        return ".tmp";
-    }
-
-    private File ensureOriginalExtension(File destination, String extension) {
-        if (extension.equals(".tmp")) {
-            return destination;
-        }
-
-        String fileName = destination.getName();
-        if (fileName.toLowerCase().endsWith(extension.toLowerCase())) {
-            return destination;
-        }
-
-        return new File(destination.getParentFile(), fileName + extension);
+        int dot = fileName.lastIndexOf('.');
+        return dot >= 0 ? fileName.substring(dot) : ".tmp";
     }
 
     private String sanitizeFileName(String fileName) {
-        if (fileName == null || fileName.trim().isEmpty()) {
-            return "downloaded-file";
-        }
-
-        return fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        return fileName == null ? "file" : fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 }

@@ -49,16 +49,13 @@ public class App extends Application {
         
         Application.setUserAgentStylesheet(new PrimerLight().getUserAgentStylesheet());
         
-        // Handle incoming packets globally
         chatClient.setOnPacketReceived(this::handleIncomingPacket);
-        
         showLogin();
     }
 
     private void showLogin() {
         LoginView loginView = new LoginView(username -> {
             this.currentUser = username;
-            // Hubungkan ke localhost port 5000 (sesuai ServerLauncher)
             chatClient.connect("localhost", 5000, () -> {
                 Packet loginPacket = new Packet(MessageType.LOGIN);
                 loginPacket.setUsername(username);
@@ -87,8 +84,6 @@ public class App extends Application {
         );
         primaryStage.setScene(new Scene(lobbyView, 900, 600));
         primaryStage.setTitle("ChatApp - Lobby");
-        
-        // Minta daftar room terbaru
         chatClient.sendPacket(new Packet(MessageType.GET_ROOMS));
     }
 
@@ -122,18 +117,22 @@ public class App extends Application {
             }
         );
         
-        // Hubungkan input teks ke Socket
         chatView.setOnSendMessage(text -> {
             Packet chatPacket = new Packet(MessageType.CHAT_MESSAGE);
             chatPacket.setMessage(text);
             chatClient.sendPacket(chatPacket);
         });
 
-        // Hubungkan aksi Kick ke Socket
         chatView.setOnKickUser(targetUser -> {
             Packet kickPacket = new Packet(MessageType.KICK_USER);
             kickPacket.setTargetUser(targetUser);
             chatClient.sendPacket(kickPacket);
+        });
+
+        chatView.setOnTypingStatus(isTyping -> {
+            Packet typingPacket = new Packet(MessageType.TYPING_STATUS);
+            typingPacket.setTyping(isTyping);
+            chatClient.sendPacket(typingPacket);
         });
 
         chatView.setOnSendFile(this::handleSendFile);
@@ -143,283 +142,140 @@ public class App extends Application {
     }
 
     private void handleSendFile(File file) {
-        if (file == null || !file.isFile()) {
-            return;
-        }
-
+        if (file == null || !file.isFile()) return;
         if (file.length() > MAX_FILE_SIZE_BYTES) {
-            Alert alert = new Alert(Alert.AlertType.WARNING, "Ukuran file maksimal 50 MB.");
-            alert.show();
+            new Alert(Alert.AlertType.WARNING, "Max 50 MB.").show();
             return;
         }
-
-        Thread uploadThread = new Thread(() -> sendFileChunks(file), "file-upload-" + file.getName());
-        uploadThread.setDaemon(true);
-        uploadThread.start();
+        new Thread(() -> sendFileChunks(file)).start();
     }
 
     private void sendFileChunks(File file) {
         try (InputStream inputStream = Files.newInputStream(file.toPath())) {
             String mimeType = Files.probeContentType(file.toPath());
-            if (mimeType == null) {
-                mimeType = "application/octet-stream";
-            }
-
-            String fileId = currentUser + "-" + System.currentTimeMillis() + "-" + Math.abs(file.getName().hashCode());
-            int totalChunks = Math.max(1, (int) Math.ceil(file.length() / (double) FILE_CHUNK_SIZE_BYTES));
+            if (mimeType == null) mimeType = "application/octet-stream";
+            String fileId = currentUser + "-" + System.currentTimeMillis();
+            int totalChunks = (int) Math.ceil(file.length() / (double) FILE_CHUNK_SIZE_BYTES);
             byte[] buffer = new byte[FILE_CHUNK_SIZE_BYTES];
             int chunkIndex = 0;
             int bytesRead;
-
-            if (file.length() == 0) {
-                sendFileChunk(file, mimeType, fileId, 0, totalChunks, new byte[0]);
-                return;
-            }
-
             while ((bytesRead = inputStream.read(buffer)) != -1) {
-                byte[] chunk = Arrays.copyOf(buffer, bytesRead);
-                if (!sendFileChunk(file, mimeType, fileId, chunkIndex, totalChunks, chunk)) {
-                    Platform.runLater(() -> {
-                        Alert alert = new Alert(Alert.AlertType.ERROR, "Koneksi ke server terputus saat mengirim file.");
-                        alert.show();
-                    });
-                    return;
-                }
-                chunkIndex++;
+                Packet filePacket = new Packet(MessageType.FILE_CHUNK);
+                filePacket.setFileId(fileId);
+                filePacket.setFileName(file.getName());
+                filePacket.setFileMimeType(mimeType);
+                filePacket.setFileSize(file.length());
+                filePacket.setChunkIndex(chunkIndex++);
+                filePacket.setTotalChunks(totalChunks);
+                filePacket.setFileData(Base64.getEncoder().encodeToString(Arrays.copyOf(buffer, bytesRead)));
+                chatClient.sendPacketNow(filePacket);
             }
-        } catch (IOException e) {
-            Platform.runLater(() -> {
-                Alert alert = new Alert(Alert.AlertType.ERROR, "Gagal membaca file: " + e.getMessage());
-                alert.show();
-            });
-        }
-    }
-
-    private boolean sendFileChunk(File file, String mimeType, String fileId, int chunkIndex, int totalChunks, byte[] chunk) {
-        Packet filePacket = new Packet(MessageType.FILE_CHUNK);
-        filePacket.setFileId(fileId);
-        filePacket.setFileName(file.getName());
-        filePacket.setFileMimeType(mimeType);
-        filePacket.setFileSize(file.length());
-        filePacket.setChunkIndex(chunkIndex);
-        filePacket.setTotalChunks(totalChunks);
-        filePacket.setFileData(Base64.getEncoder().encodeToString(chunk));
-        filePacket.setMessage("Mengirim file: " + file.getName());
-        return chatClient.sendPacketNow(filePacket);
+        } catch (IOException ignored) {}
     }
 
     private void handleIncomingPacket(Packet packet) {
-        switch (packet.getType()) {
-            case LOGIN_SUCCESS:
-                showLobby();
-                break;
-                
-            case ROOM_LIST:
-                if (lobbyView != null && packet.getMessage() != null) {
-                    Platform.runLater(() -> {
+        Platform.runLater(() -> {
+            switch (packet.getType()) {
+                case LOGIN_SUCCESS: showLobby(); break;
+                case ROOM_LIST:
+                    if (lobbyView != null && packet.getMessage() != null) {
                         lobbyView.clearRooms();
-                        String data = packet.getMessage();
-                        if (!data.isEmpty()) {
-                            for (String roomStr : data.split(",")) {
-                                String[] parts = roomStr.split(":");
-                                if (parts.length >= 3) {
-                                    lobbyView.addRoom(new Room(parts[0], parts[1], parts[2]));
-                                }
-                            }
+                        for (String roomStr : packet.getMessage().split(",")) {
+                            String[] parts = roomStr.split(":");
+                            if (parts.length >= 3) lobbyView.addRoom(new Room(parts[0], parts[1], parts[2]));
                         }
-                    });
-                }
-                break;
-
-            case ROOM_CREATED:
-                Room newRoom = new Room(packet.getRoomId(), packet.getRoomName(), currentUser);
-                showChat(newRoom);
-                break;
-
-            case MESSAGE_HISTORY:
-                handleMessageHistory(packet);
-                break;
-
-            case CHAT_MESSAGE:
-                if (chatView != null) {
-                    chatView.addMessage(packet.getUsername(), packet.getMessage(), packet.getUsername().equals(currentUser));
-                }
-                break;
-
-            case FILE_MESSAGE:
-                if (chatView != null) {
-                    chatView.addFileMessage(
-                        packet.getUsername(),
-                        packet.getFileName(),
-                        packet.getFileMimeType(),
-                        packet.getFileSize(),
-                        packet.getFileData(),
-                        packet.getUsername().equals(currentUser)
-                    );
-                }
-                break;
-
-            case FILE_CHUNK:
-                handleFileChunk(packet);
-                break;
-
-            case USER_JOINED:
-                if (currentRoom != null && chatView != null) {
-                    if (!currentRoom.getParticipants().contains(packet.getUsername())) {
-                        currentRoom.getParticipants().add(packet.getUsername());
-                        Platform.runLater(() -> chatView.refreshParticipants());
                     }
-                    chatView.addMessage("Sistem", packet.getMessage(), false);
-                }
-                break;
-
-            case USER_LEFT:
-                if (currentRoom != null && chatView != null) {
-                    currentRoom.getParticipants().remove(packet.getUsername());
-                    Platform.runLater(() -> chatView.refreshParticipants());
-                    chatView.addMessage("Sistem", packet.getMessage(), false);
-                }
-                break;
-
-            case SYSTEM_NOTIFICATION:
-                if (chatView != null) {
-                    chatView.addMessage("Sistem", packet.getMessage(), false);
-                }
-                break;
-
-            case ERROR:
-                Alert error = new Alert(Alert.AlertType.ERROR, packet.getMessage());
-                error.show();
-                break;
-
-            case USER_KICKED:
-            case ROOM_DELETED:
-                Platform.runLater(() -> {
-                    Alert info = new Alert(Alert.AlertType.INFORMATION, packet.getMessage());
-                    info.show();
+                    break;
+                case ROOM_CREATED:
+                    showChat(new Room(packet.getRoomId(), packet.getRoomName(), currentUser));
+                    break;
+                case MESSAGE_HISTORY: handleMessageHistory(packet); break;
+                case CHAT_MESSAGE:
+                    if (chatView != null) chatView.addMessage(packet.getUsername(), packet.getMessage(), packet.getUsername().equals(currentUser));
+                    break;
+                case FILE_MESSAGE:
+                    if (chatView != null) chatView.addFileMessage(packet.getUsername(), packet.getFileName(), packet.getFileMimeType(), packet.getFileSize(), packet.getFileData(), packet.getUsername().equals(currentUser));
+                    break;
+                case FILE_CHUNK: handleFileChunk(packet); break;
+                case USER_JOINED:
+                    if (currentRoom != null && chatView != null) {
+                        if (!currentRoom.getParticipants().contains(packet.getUsername())) {
+                            currentRoom.getParticipants().add(packet.getUsername());
+                            chatView.refreshParticipants();
+                        }
+                        chatView.addMessage("Sistem", packet.getMessage(), false);
+                    }
+                    break;
+                case USER_LEFT:
+                    if (currentRoom != null && chatView != null) {
+                        currentRoom.getParticipants().remove(packet.getUsername());
+                        chatView.refreshParticipants();
+                        chatView.addMessage("Sistem", packet.getMessage(), false);
+                    }
+                    break;
+                case ERROR: new Alert(Alert.AlertType.ERROR, packet.getMessage()).show(); break;
+                case USER_KICKED:
+                case ROOM_DELETED:
+                    new Alert(Alert.AlertType.INFORMATION, packet.getMessage()).show();
                     showLobby();
-                });
-                break;
-        }
+                    break;
+                case TYPING_STATUS:
+                    if (chatView != null) chatView.setPlayerTyping(packet.getUsername(), packet.isTyping());
+                    break;
+                case USER_PRESENCE:
+                    if (chatView != null) chatView.refreshParticipants();
+                    break;
+            }
+        });
     }
 
     private void handleMessageHistory(Packet packet) {
-        if (chatView == null || packet.getMessage() == null || packet.getMessage().isEmpty()) {
-            return;
-        }
-
+        if (chatView == null || packet.getMessage() == null) return;
         Type historyType = new TypeToken<List<HistoryMessage>>() {}.getType();
         List<HistoryMessage> messages = gson.fromJson(packet.getMessage(), historyType);
-        if (messages == null || messages.isEmpty()) {
-            return;
-        }
-
-        chatView.addMessage("Sistem", "Riwayat chat dimuat.", false);
+        if (messages == null) return;
         for (HistoryMessage message : messages) {
-            if (message.content != null && message.content.startsWith("[FILE] ")) {
-                continue;
-            }
-
-            chatView.addMessage(
-                    message.sender,
-                    message.content,
-                    message.sender != null && message.sender.equals(currentUser));
+            if (message.content != null && message.content.startsWith("[FILE] ")) continue;
+            chatView.addMessage(message.sender, message.content, message.sender.equals(currentUser));
         }
     }
 
     private void handleFileChunk(Packet packet) {
-        if (packet.getFileId() == null || packet.getTotalChunks() <= 0) {
-            return;
-        }
-
-        int maxAllowedChunks = (int) Math.ceil(MAX_FILE_SIZE_BYTES / (double) FILE_CHUNK_SIZE_BYTES) + 1;
-        if (packet.getFileSize() > MAX_FILE_SIZE_BYTES || packet.getTotalChunks() > maxAllowedChunks) {
-            if (chatView != null) {
-                Platform.runLater(() -> chatView.addMessage("Sistem", "File dari " + packet.getUsername() + " melebihi batas ukuran.", false));
-            }
-            return;
-        }
-
-        try {
-            IncomingFile incomingFile = incomingFiles.computeIfAbsent(
-                packet.getFileId(),
-                id -> new IncomingFile(packet)
-            );
-
-            if (incomingFile.addChunk(packet)) {
-                incomingFiles.remove(packet.getFileId());
-                if (chatView != null) {
-                    byte[] fileBytes = incomingFile.toByteArray();
-                    Platform.runLater(() -> chatView.addFileMessage(
-                            incomingFile.sender,
-                            incomingFile.fileName,
-                            incomingFile.fileMimeType,
-                            incomingFile.fileSize,
-                            fileBytes,
-                            incomingFile.sender.equals(currentUser)
-                    ));
-                }
-            }
-        } catch (IllegalArgumentException e) {
+        IncomingFile incomingFile = incomingFiles.computeIfAbsent(packet.getFileId(), id -> new IncomingFile(packet));
+        if (incomingFile.addChunk(packet)) {
             incomingFiles.remove(packet.getFileId());
             if (chatView != null) {
-                Platform.runLater(() -> chatView.addMessage("Sistem", "File dari " + packet.getUsername() + " gagal diterima.", false));
+                chatView.addFileMessage(incomingFile.sender, incomingFile.fileName, incomingFile.fileMimeType, incomingFile.fileSize, incomingFile.toByteArray(), incomingFile.sender.equals(currentUser));
             }
         }
     }
 
     private static class IncomingFile {
-        private final String sender;
-        private final String fileName;
-        private final String fileMimeType;
+        private final String sender, fileName, fileMimeType;
         private final long fileSize;
         private final byte[][] chunks;
         private int receivedChunks;
-
-        private IncomingFile(Packet firstPacket) {
-            this.sender = firstPacket.getUsername();
-            this.fileName = firstPacket.getFileName();
-            this.fileMimeType = firstPacket.getFileMimeType();
-            this.fileSize = firstPacket.getFileSize();
-            this.chunks = new byte[firstPacket.getTotalChunks()][];
+        private IncomingFile(Packet p) {
+            this.sender = p.getUsername(); this.fileName = p.getFileName();
+            this.fileMimeType = p.getFileMimeType(); this.fileSize = p.getFileSize();
+            this.chunks = new byte[p.getTotalChunks()][];
         }
-
-        private boolean addChunk(Packet packet) {
-            int chunkIndex = packet.getChunkIndex();
-            if (chunkIndex < 0 || chunkIndex >= chunks.length || packet.getFileData() == null) {
-                return false;
-            }
-
-            if (chunks[chunkIndex] == null) {
-                chunks[chunkIndex] = Base64.getDecoder().decode(packet.getFileData());
+        private boolean addChunk(Packet p) {
+            if (chunks[p.getChunkIndex()] == null) {
+                chunks[p.getChunkIndex()] = Base64.getDecoder().decode(p.getFileData());
                 receivedChunks++;
             }
-
             return receivedChunks == chunks.length;
         }
-
         private byte[] toByteArray() {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream((int) fileSize);
-            for (byte[] chunk : chunks) {
-                if (chunk != null) {
-                    outputStream.write(chunk, 0, chunk.length);
-                }
-            }
-            return outputStream.toByteArray();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream((int) fileSize);
+            for (byte[] c : chunks) if (c != null) bos.write(c, 0, c.length);
+            return bos.toByteArray();
         }
     }
 
-    private static class HistoryMessage {
-        private String sender;
-        private String content;
-    }
+    private static class HistoryMessage { String sender, content; }
 
-    @Override
-    public void stop() {
-        chatClient.disconnect();
-    }
-
-    public static void main(String[] args) {
-        launch();
-    }
+    @Override public void stop() { chatClient.disconnect(); }
+    public static void main(String[] args) { launch(); }
 }

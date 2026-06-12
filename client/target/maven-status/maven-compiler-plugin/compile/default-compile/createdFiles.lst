@@ -1,1 +1,14 @@
+com\example\views\LoginView.class
+com\example\App$2.class
+com\example\models\Room.class
 com\example\App$1.class
+com\example\views\LobbyView.class
+com\example\views\CreateRoomDialog.class
+com\example\protocol\Packet.class
+com\example\App$HistoryMessage.class
+com\example\App.class
+com\example\network\ChatClient.class
+com\example\views\LobbyView$1.class
+com\example\protocol\MessageType.class
+com\example\App$IncomingFile.class
+com\example\views\ChatView.class

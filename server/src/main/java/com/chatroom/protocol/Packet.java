@@ -30,6 +30,10 @@ public class Packet {
 
     private long timestamp;
 
+    private boolean isTyping;
+
+    private boolean isOnline;
+
     public Packet() {
     }
 
@@ -148,5 +152,21 @@ public class Packet {
 
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public boolean isTyping() {
+        return isTyping;
+    }
+
+    public void setTyping(boolean typing) {
+        isTyping = typing;
+    }
+
+    public boolean isOnline() {
+        return isOnline;
+    }
+
+    public void setOnline(boolean online) {
+        isOnline = online;
     }
 }
