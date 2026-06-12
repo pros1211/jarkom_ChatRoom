@@ -12,6 +12,8 @@ public class Packet {
 
     private String targetUser;
 
+    private int maxMembers;
+
     private String message;
 
     private String fileName;
@@ -29,6 +31,10 @@ public class Packet {
     private long fileSize;
 
     private long timestamp;
+
+    private boolean isTyping;
+
+    private boolean isOnline;
 
     public Packet() {
     }
@@ -76,6 +82,14 @@ public class Packet {
 
     public void setTargetUser(String targetUser) {
         this.targetUser = targetUser;
+    }
+
+    public int getMaxMembers() {
+        return maxMembers;
+    }
+
+    public void setMaxMembers(int maxMembers) {
+        this.maxMembers = maxMembers;
     }
 
     public String getMessage() {
@@ -148,5 +162,21 @@ public class Packet {
 
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public boolean isTyping() {
+        return isTyping;
+    }
+
+    public void setTyping(boolean typing) {
+        isTyping = typing;
+    }
+
+    public boolean isOnline() {
+        return isOnline;
+    }
+
+    public void setOnline(boolean online) {
+        isOnline = online;
     }
 }

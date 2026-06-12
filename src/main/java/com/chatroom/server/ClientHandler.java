@@ -15,9 +15,11 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.chatroom.database.DatabaseManager;
 import com.chatroom.model.Message;
+import com.chatroom.model.Room;
 import com.chatroom.protocol.MessageType;
 import com.chatroom.protocol.Packet;
 import com.google.gson.Gson;
@@ -115,6 +117,10 @@ public class ClientHandler implements Runnable {
                 handleCreateRoom(packet);
                 break;
 
+            case GET_ROOMS:
+                handleGetRooms();
+                break;
+
             case JOIN_ROOM:
                 handleJoinRoom(packet);
                 break;
@@ -157,12 +163,45 @@ public class ClientHandler implements Runnable {
         sendPacket(response);
     }
 
+    private void handleGetRooms() {
+
+        loadRoomsFromDatabase();
+
+        Map<String, ChatRoom> rooms = server.getRoomManager().getRooms();
+        String roomListData = rooms.values().stream()
+                .map(room -> room.getRoomId() + ":" + room.getRoomName() + ":" + room.getOwnerName())
+                .collect(Collectors.joining(","));
+
+        Packet response = new Packet(MessageType.ROOM_LIST);
+        response.setMessage(roomListData);
+        sendPacket(response);
+    }
+
+    private void loadRoomsFromDatabase() {
+
+        try {
+            List<Room> rooms = databaseManager.getRooms();
+            for (Room room : rooms) {
+                server.getRoomManager()
+                        .addRoom(
+                                room.getRoomId(),
+                                room.getRoomName(),
+                                room.getOwner());
+            }
+        } catch (Exception e) {
+            System.out.println(
+                    "Gagal mengambil daftar room dari database: "
+                            + e.getMessage());
+        }
+    }
+
     private void handleCreateRoom(
             Packet packet) {
 
         ChatRoom room = server.getRoomManager()
                 .createRoom(
-                        packet.getRoomName());
+                        packet.getRoomName(),
+                        username);
         System.out.println(
                 server.getRoomManager()
                         .getRooms()

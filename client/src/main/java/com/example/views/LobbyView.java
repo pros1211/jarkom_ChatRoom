@@ -103,6 +103,11 @@ public class LobbyView extends BorderPane {
                     owner.setStyle("-fx-font-size: 11px; -fx-text-fill: #8e8e93;");
 
                     info.getChildren().addAll(name, owner);
+                    if (item.getMaxMembers() > 0) {
+                        Label limit = new Label("maks. " + item.getMaxMembers() + " peserta");
+                        limit.setStyle("-fx-font-size: 11px; -fx-text-fill: #6e6e73;");
+                        info.getChildren().add(limit);
+                    }
                     card.getChildren().addAll(iconContainer, info);
 
                     setGraphic(card);

@@ -6,6 +6,7 @@ public class Packet {
     private String roomId;
     private String roomName;
     private String targetUser;
+    private int maxMembers;
     private String message;
     private String fileName;
     private String fileMimeType;
@@ -35,6 +36,8 @@ public class Packet {
     public void setRoomName(String roomName) { this.roomName = roomName; }
     public String getTargetUser() { return targetUser; }
     public void setTargetUser(String targetUser) { this.targetUser = targetUser; }
+    public int getMaxMembers() { return maxMembers; }
+    public void setMaxMembers(int maxMembers) { this.maxMembers = maxMembers; }
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
     public String getFileName() { return fileName; }

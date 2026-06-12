@@ -11,6 +11,13 @@ public class RoomManager {
     public ChatRoom createRoom(
             String roomName,
             String ownerName) {
+        return createRoom(roomName, ownerName, 10);
+    }
+
+    public ChatRoom createRoom(
+            String roomName,
+            String ownerName,
+            int maxMembers) {
 
         String roomId = UUID.randomUUID()
                 .toString()
@@ -19,13 +26,36 @@ public class RoomManager {
         ChatRoom room = new ChatRoom(
                 roomId,
                 roomName,
-                ownerName);
+                ownerName,
+                maxMembers);
 
         rooms.put(
                 room.getRoomId(),
                 room);
 
         return room;
+    }
+
+    public ChatRoom addRoom(
+            String roomId,
+            String roomName,
+            String ownerName) {
+        return addRoom(roomId, roomName, ownerName, 10);
+    }
+
+    public ChatRoom addRoom(
+            String roomId,
+            String roomName,
+            String ownerName,
+            int maxMembers) {
+
+        return rooms.computeIfAbsent(
+                roomId,
+                id -> new ChatRoom(
+                        id,
+                        roomName,
+                        ownerName,
+                        maxMembers));
     }
 
     public ChatRoom getRoom(

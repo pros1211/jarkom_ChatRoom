@@ -4,6 +4,7 @@ import javafx.geometry.Insets;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Button;
 import javafx.application.Platform;
@@ -11,9 +12,17 @@ import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 
-import java.util.Optional;
+public class CreateRoomDialog extends Dialog<CreateRoomDialog.RoomResult> {
 
-public class CreateRoomDialog extends Dialog<String> {
+    public static class RoomResult {
+        public final String name;
+        public final int limit;
+
+        public RoomResult(String name, int limit) {
+            this.name = name;
+            this.limit = limit;
+        }
+    }
 
     public CreateRoomDialog() {
         setTitle("Buat Room Baru");
@@ -30,25 +39,35 @@ public class CreateRoomDialog extends Dialog<String> {
         okButton.setDefaultButton(true);
 
         // Content
-        VBox content = new VBox(10);
+        VBox content = new VBox(12);
         content.setPadding(new Insets(20));
         content.setPrefWidth(350);
 
-        Label label = new Label("Nama Ruangan:");
-        label.setStyle("-fx-font-weight: bold;");
+        Label nameLabel = new Label("Nama Ruangan:");
+        nameLabel.setStyle("-fx-font-weight: bold;");
 
         TextField roomNameField = new TextField();
         roomNameField.setPromptText("Misal: Belajar Bareng");
         roomNameField.setOnAction(e -> okButton.fire());
         Platform.runLater(roomNameField::requestFocus);
 
-        content.getChildren().addAll(label, roomNameField);
+        Label limitLabel = new Label("Batas Peserta:");
+        limitLabel.setStyle("-fx-font-weight: bold;");
+
+        Spinner<Integer> limitSpinner = new Spinner<>(2, 100, 10);
+        limitSpinner.setEditable(true);
+        limitSpinner.setMaxWidth(Double.MAX_VALUE);
+
+        content.getChildren().addAll(nameLabel, roomNameField, limitLabel, limitSpinner);
         getDialogPane().setContent(content);
 
         // Convert result
         setResultConverter(buttonType -> {
             if (buttonType == ButtonType.OK) {
-                return roomNameField.getText().trim();
+                String name = roomNameField.getText().trim();
+                if (!name.isEmpty()) {
+                    return new RoomResult(name, limitSpinner.getValue());
+                }
             }
             return null;
         });

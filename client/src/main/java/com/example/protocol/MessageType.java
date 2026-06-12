@@ -12,6 +12,7 @@ public enum MessageType {
     ROOM_LIST,
 
     JOIN_ROOM,
+    JOIN_SUCCESS,
     LEAVE_ROOM,
 
     USER_JOINED,
@@ -32,5 +33,6 @@ public enum MessageType {
     ROOM_DELETED,
 
     ERROR,
+    CLIENT_READY,
     SYSTEM_NOTIFICATION
 }

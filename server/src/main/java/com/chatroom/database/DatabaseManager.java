@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.chatroom.model.Message;
+import com.chatroom.model.Room;
 
 public class DatabaseManager {
 
@@ -73,8 +74,10 @@ public class DatabaseManager {
                             + "room_id VARCHAR(100) UNIQUE NOT NULL,"
                             + "room_name VARCHAR(100) NOT NULL,"
                             + "owner_username VARCHAR(50),"
+                            + "max_members INT DEFAULT 10,"
                             + "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
                             + ")");
+            ensureRoomsMaxMembersColumn(conn);
 
             statement.executeUpdate(
                     "CREATE TABLE IF NOT EXISTS messages ("
@@ -119,9 +122,14 @@ public class DatabaseManager {
 
     public void saveRoom(String roomId, String roomName, String ownerUsername)
             throws SQLException {
+        saveRoom(roomId, roomName, ownerUsername, 10);
+    }
 
-        String sql = "INSERT INTO rooms(room_id, room_name, owner_username) VALUES(?, ?, ?) "
-                + "ON DUPLICATE KEY UPDATE room_name = ?, owner_username = ?";
+    public void saveRoom(String roomId, String roomName, String ownerUsername, int maxMembers)
+            throws SQLException {
+
+        String sql = "INSERT INTO rooms(room_id, room_name, owner_username, max_members) VALUES(?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE room_name = ?, owner_username = ?, max_members = ?";
 
         try (
                 Connection conn = getConnection();
@@ -130,8 +138,10 @@ public class DatabaseManager {
             ps.setString(1, roomId);
             ps.setString(2, roomName);
             ps.setString(3, ownerUsername);
-            ps.setString(4, roomName);
-            ps.setString(5, ownerUsername);
+            ps.setInt(4, Math.max(2, maxMembers));
+            ps.setString(5, roomName);
+            ps.setString(6, ownerUsername);
+            ps.setInt(7, Math.max(2, maxMembers));
 
             ps.executeUpdate();
         }
@@ -207,6 +217,51 @@ public class DatabaseManager {
         }
 
         return messages;
+    }
+
+    public List<Room> getRooms()
+            throws SQLException {
+
+        String sql = "SELECT room_id, room_name, owner_username, max_members "
+                + "FROM rooms ORDER BY created_at ASC, id ASC";
+        List<Room> rooms = new ArrayList<>();
+
+        try (
+                Connection conn = getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                rooms.add(
+                                new Room(
+                                        rs.getString("room_id"),
+                                        rs.getString("room_name"),
+                                        rs.getString("owner_username"),
+                                        rs.getInt("max_members")));
+            }
+        }
+
+        return rooms;
+    }
+
+    private static void ensureRoomsMaxMembersColumn(Connection conn)
+            throws SQLException {
+
+        String sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+                + "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'rooms' AND COLUMN_NAME = 'max_members'";
+
+        try (
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, DATABASE_NAME);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    try (Statement statement = conn.createStatement()) {
+                        statement.executeUpdate("ALTER TABLE rooms ADD COLUMN max_members INT DEFAULT 10");
+                    }
+                }
+            }
+        }
     }
 
     public List<StoredFile> getFilesByRoom(String roomId)

@@ -10,6 +10,8 @@ public class Room {
 
     private String owner;
 
+    private int maxMembers;
+
     private LocalDateTime createdAt;
 
     public Room() {
@@ -19,10 +21,19 @@ public class Room {
             String roomId,
             String roomName,
             String owner) {
+        this(roomId, roomName, owner, 10);
+    }
+
+    public Room(
+            String roomId,
+            String roomName,
+            String owner,
+            int maxMembers) {
 
         this.roomId = roomId;
         this.roomName = roomName;
         this.owner = owner;
+        this.maxMembers = maxMembers;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -36,6 +47,10 @@ public class Room {
 
     public String getOwner() {
         return owner;
+    }
+
+    public int getMaxMembers() {
+        return maxMembers;
     }
 
     public LocalDateTime getCreatedAt() {

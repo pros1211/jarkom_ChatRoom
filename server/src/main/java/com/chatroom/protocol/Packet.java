@@ -12,6 +12,8 @@ public class Packet {
 
     private String targetUser;
 
+    private int maxMembers;
+
     private String message;
 
     private String fileName;
@@ -80,6 +82,14 @@ public class Packet {
 
     public void setTargetUser(String targetUser) {
         this.targetUser = targetUser;
+    }
+
+    public int getMaxMembers() {
+        return maxMembers;
+    }
+
+    public void setMaxMembers(int maxMembers) {
+        this.maxMembers = maxMembers;
     }
 
     public String getMessage() {

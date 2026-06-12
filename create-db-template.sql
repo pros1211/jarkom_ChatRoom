@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS rooms (
     room_id VARCHAR(100) UNIQUE NOT NULL,
     room_name VARCHAR(100) NOT NULL,
     owner_username VARCHAR(50),
+    max_members INT DEFAULT 10,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -13,8 +13,6 @@ import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
@@ -44,7 +42,6 @@ public class ChatView extends BorderPane {
         this.room = room;
         this.currentUser = username;
 
-        // --- 1. Header ---
         HBox header = new HBox(15);
         header.setPadding(new Insets(10, 20, 10, 20));
         header.setAlignment(Pos.CENTER_LEFT);
@@ -85,7 +82,6 @@ public class ChatView extends BorderPane {
             header.getChildren().add(leaveBtn);
         }
 
-        // --- 2. Chat Area ---
         messageContainer = new VBox(8);
         messageContainer.setPadding(new Insets(20));
         messageContainer.setStyle("-fx-background-color: #ffffff;");
@@ -97,14 +93,12 @@ public class ChatView extends BorderPane {
         scrollPane.setStyle("-fx-background-color: transparent; -fx-background: #ffffff;");
         messageContainer.heightProperty().addListener((obs, oldHeight, newHeight) -> scrollPane.setVvalue(1.0));
 
-        // Typing Label
         typingLabel = new Label("");
         typingLabel.setStyle("-fx-text-fill: #8e8e93; -fx-font-size: 11px; -fx-italic: true; -fx-padding: 0 20 5 20;");
 
         VBox centerContent = new VBox(scrollPane, typingLabel);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
 
-        // --- 3. Input Area ---
         HBox inputWrapper = new HBox(10);
         inputWrapper.setPadding(new Insets(10, 20, 20, 20));
         inputWrapper.setAlignment(Pos.CENTER);
@@ -121,7 +115,6 @@ public class ChatView extends BorderPane {
         messageField.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 5;");
         HBox.setHgrow(messageField, Priority.ALWAYS);
         
-        // Typing Status Listener
         messageField.textProperty().addListener((obs, oldVal, newVal) -> {
             if (onTypingStatus != null) {
                 onTypingStatus.accept(!newVal.isEmpty());
@@ -146,7 +139,6 @@ public class ChatView extends BorderPane {
         pill.getChildren().addAll(fileBtn, messageField, sendBtn);
         inputWrapper.getChildren().add(pill);
 
-        // --- 4. Sidebar Peserta ---
         VBox userSidebar = new VBox(15);
         userSidebar.setPadding(new Insets(20, 15, 15, 15));
         userSidebar.setPrefWidth(220);
@@ -181,10 +173,14 @@ public class ChatView extends BorderPane {
     }
 
     private java.util.Set<String> typingUsers = new java.util.HashSet<>();
+
     public void setPlayerTyping(String username, boolean isTyping) {
-        if (isTyping) typingUsers.add(username);
-        else typingUsers.remove(username);
-        
+        if (isTyping) {
+            typingUsers.add(username);
+        } else {
+            typingUsers.remove(username);
+        }
+
         javafx.application.Platform.runLater(() -> {
             if (typingUsers.isEmpty()) {
                 typingLabel.setText("");
@@ -207,9 +203,8 @@ public class ChatView extends BorderPane {
             avatar.setPrefSize(30, 30);
             avatar.setStyle("-fx-background-color: #e1e1e1; -fx-background-radius: 15; -fx-font-size: 12px; -fx-font-weight: bold;");
             
-            // Indikator Online (Dot)
             Circle statusDot = new Circle(4);
-            statusDot.setFill(Color.web("#34C759")); // Default Hijau (Online)
+            statusDot.setFill(Color.web("#34C759"));
             
             Label pLabel = new Label(participant + (participant.equals(currentUser) ? " (Anda)" : ""));
             pLabel.setStyle("-fx-font-size: 13px;");
@@ -225,7 +220,9 @@ public class ChatView extends BorderPane {
                 kickBtn.getStyleClass().addAll("flat", "danger");
                 kickBtn.setStyle("-fx-padding: 0;");
                 kickBtn.setOnAction(e -> {
-                    if (onKickUser != null) onKickUser.accept(participant);
+                    if (onKickUser != null) {
+                        onKickUser.accept(participant);
+                    }
                 });
                 userRow.getChildren().add(kickBtn);
             }
@@ -234,6 +231,7 @@ public class ChatView extends BorderPane {
     }
 
     private Consumer<String> onSendMessage;
+
     public void setOnSendMessage(Consumer<String> onSendMessage) {
         this.onSendMessage = onSendMessage;
     }
@@ -328,7 +326,9 @@ public class ChatView extends BorderPane {
         fileCard.getChildren().addAll(fileTitle, fileMeta);
 
         Node preview = createFilePreview(safeFileName, safeMimeType, bytes);
-        if (preview != null) fileCard.getChildren().add(preview);
+        if (preview != null) {
+            fileCard.getChildren().add(preview);
+        }
 
         Button downloadBtn = new Button("Download");
         downloadBtn.setMaxWidth(Double.MAX_VALUE);
@@ -354,7 +354,10 @@ public class ChatView extends BorderPane {
     }
 
     private Node createFilePreview(String fileName, String fileMimeType, byte[] bytes) {
-        if (fileMimeType == null) return null;
+        if (fileMimeType == null) {
+            return null;
+        }
+
         if (fileMimeType.startsWith("image/")) {
             Image image = new Image(new ByteArrayInputStream(bytes), 320, 220, true, true);
             ImageView imageView = new ImageView(image);
@@ -414,8 +417,14 @@ public class ChatView extends BorderPane {
     }
 
     private String formatFileSize(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+
+        if (bytes < 1024 * 1024) {
+            return String.format("%.1f KB", bytes / 1024.0);
+        }
+
         return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
