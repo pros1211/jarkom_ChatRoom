@@ -14,6 +14,20 @@ public class Packet {
 
     private String message;
 
+    private String fileName;
+
+    private String fileMimeType;
+
+    private String fileData;
+
+    private String fileId;
+
+    private int chunkIndex;
+
+    private int totalChunks;
+
+    private long fileSize;
+
     private long timestamp;
 
     public Packet() {
@@ -70,6 +84,62 @@ public class Packet {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public String getFileMimeType() {
+        return fileMimeType;
+    }
+
+    public void setFileMimeType(String fileMimeType) {
+        this.fileMimeType = fileMimeType;
+    }
+
+    public String getFileData() {
+        return fileData;
+    }
+
+    public void setFileData(String fileData) {
+        this.fileData = fileData;
+    }
+
+    public String getFileId() {
+        return fileId;
+    }
+
+    public void setFileId(String fileId) {
+        this.fileId = fileId;
+    }
+
+    public int getChunkIndex() {
+        return chunkIndex;
+    }
+
+    public void setChunkIndex(int chunkIndex) {
+        this.chunkIndex = chunkIndex;
+    }
+
+    public int getTotalChunks() {
+        return totalChunks;
+    }
+
+    public void setTotalChunks(int totalChunks) {
+        this.totalChunks = totalChunks;
+    }
+
+    public long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(long fileSize) {
+        this.fileSize = fileSize;
     }
 
     public long getTimestamp() {

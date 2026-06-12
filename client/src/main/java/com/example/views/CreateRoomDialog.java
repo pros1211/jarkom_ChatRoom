@@ -5,6 +5,8 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Button;
+import javafx.application.Platform;
 import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
@@ -22,8 +24,10 @@ public class CreateRoomDialog extends Dialog<String> {
         getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         
         // Style "OK" button
-        getDialogPane().lookupButton(ButtonType.OK).getStyleClass().add("accent");
-        ((javafx.scene.control.Button) getDialogPane().lookupButton(ButtonType.OK)).setText("Buat Room");
+        Button okButton = (Button) getDialogPane().lookupButton(ButtonType.OK);
+        okButton.getStyleClass().add("accent");
+        okButton.setText("Buat Room");
+        okButton.setDefaultButton(true);
 
         // Content
         VBox content = new VBox(10);
@@ -35,6 +39,8 @@ public class CreateRoomDialog extends Dialog<String> {
 
         TextField roomNameField = new TextField();
         roomNameField.setPromptText("Misal: Belajar Bareng");
+        roomNameField.setOnAction(e -> okButton.fire());
+        Platform.runLater(roomNameField::requestFocus);
 
         content.getChildren().addAll(label, roomNameField);
         getDialogPane().setContent(content);
@@ -42,7 +48,7 @@ public class CreateRoomDialog extends Dialog<String> {
         // Convert result
         setResultConverter(buttonType -> {
             if (buttonType == ButtonType.OK) {
-                return roomNameField.getText();
+                return roomNameField.getText().trim();
             }
             return null;
         });

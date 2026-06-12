@@ -1,19 +1,31 @@
 package com.example.views;
 
 import com.example.models.Room;
+import javafx.scene.Node;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
+import javafx.scene.media.MediaView;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.Base64;
 import java.util.function.Consumer;
 
 public class ChatView extends BorderPane {
@@ -24,6 +36,7 @@ public class ChatView extends BorderPane {
 
     private final VBox userListContainer;
     private Consumer<String> onKickUser;
+    private Consumer<File> onSendFile;
 
     public ChatView(Room room, String username, Runnable onBack, Runnable onCloseRoom) {
         this.room = room;
@@ -82,6 +95,7 @@ public class ChatView extends BorderPane {
         scrollPane.setVvalue(1.0);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setStyle("-fx-background-color: transparent; -fx-background: #ffffff;");
+        messageContainer.heightProperty().addListener((obs, oldHeight, newHeight) -> scrollPane.setVvalue(1.0));
 
         // --- 3. Input Area (iMessage Pill Style) ---
         HBox inputWrapper = new HBox(10);
@@ -100,6 +114,11 @@ public class ChatView extends BorderPane {
         messageField.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 5;");
         HBox.setHgrow(messageField, Priority.ALWAYS);
 
+        Button fileBtn = new Button("File");
+        fileBtn.getStyleClass().add("flat");
+        fileBtn.setStyle("-fx-text-fill: #007AFF; -fx-padding: 4 8 4 0;");
+        fileBtn.setOnAction(e -> handleChooseFile());
+
         Button sendBtn = new Button();
         FontIcon sendIcon = new FontIcon(MaterialDesignA.ARROW_UP_BOLD_CIRCLE);
         sendIcon.setIconSize(28);
@@ -110,7 +129,7 @@ public class ChatView extends BorderPane {
         sendBtn.setOnAction(e -> handleSendMessage());
         messageField.setOnAction(e -> handleSendMessage());
 
-        pill.getChildren().addAll(messageField, sendBtn);
+        pill.getChildren().addAll(fileBtn, messageField, sendBtn);
         inputWrapper.getChildren().add(pill);
 
         // --- 4. Sidebar Peserta ---
@@ -137,6 +156,10 @@ public class ChatView extends BorderPane {
 
     public void setOnKickUser(Consumer<String> onKickUser) {
         this.onKickUser = onKickUser;
+    }
+
+    public void setOnSendFile(Consumer<File> onSendFile) {
+        this.onSendFile = onSendFile;
     }
 
     public void refreshParticipants() {
@@ -189,6 +212,19 @@ public class ChatView extends BorderPane {
         }
     }
 
+    private void handleChooseFile() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Pilih file");
+        fileChooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("Semua File", "*.*")
+        );
+
+        File selectedFile = fileChooser.showOpenDialog(getScene().getWindow());
+        if (selectedFile != null && onSendFile != null) {
+            onSendFile.accept(selectedFile);
+        }
+    }
+
     public void addMessage(String sender, String text, boolean isSelf) {
         if (sender.equals("Sistem")) {
             Label sysMsg = new Label(text.toUpperCase());
@@ -233,5 +269,214 @@ public class ChatView extends BorderPane {
 
         bubbleWrapper.getChildren().add(wrapper);
         messageContainer.getChildren().add(bubbleWrapper);
+    }
+
+    public void addFileMessage(String sender, String fileName, String fileMimeType, long fileSize, String fileData, boolean isSelf) {
+        if (fileData == null) {
+            addMessage("Sistem", "File dari " + sender + " kosong atau rusak.", false);
+            return;
+        }
+
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(fileData);
+        } catch (IllegalArgumentException e) {
+            addMessage("Sistem", "File dari " + sender + " gagal dibaca.", false);
+            return;
+        }
+
+        addFileMessage(sender, fileName, fileMimeType, fileSize, bytes, isSelf);
+    }
+
+    public void addFileMessage(String sender, String fileName, String fileMimeType, long fileSize, byte[] bytes, boolean isSelf) {
+        String safeFileName = fileName == null ? "file" : fileName;
+        String safeMimeType = fileMimeType == null ? "application/octet-stream" : fileMimeType;
+
+        VBox bubbleWrapper = new VBox(2);
+        VBox fileCard = new VBox(8);
+        fileCard.setMaxWidth(360);
+        fileCard.setPadding(new Insets(10, 12, 10, 12));
+
+        Label fileTitle = new Label(safeFileName);
+        fileTitle.setWrapText(true);
+        fileTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
+
+        Label fileMeta = new Label(formatFileSize(fileSize) + " - " + safeMimeType);
+        fileMeta.setStyle("-fx-font-size: 11px; -fx-text-fill: #6e6e73;");
+
+        fileCard.getChildren().addAll(fileTitle, fileMeta);
+
+        Node preview = createFilePreview(safeFileName, safeMimeType, bytes);
+        if (preview != null) {
+            fileCard.getChildren().add(preview);
+        }
+
+        Button downloadBtn = new Button("Download");
+        downloadBtn.setMaxWidth(Double.MAX_VALUE);
+        downloadBtn.setOnAction(e -> saveFile(safeFileName, bytes));
+        fileCard.getChildren().add(downloadBtn);
+
+        HBox wrapper = new HBox(fileCard);
+        if (isSelf) {
+            wrapper.setAlignment(Pos.CENTER_RIGHT);
+            fileCard.setStyle(
+                "-fx-background-color: #007AFF;" +
+                "-fx-background-radius: 18 18 2 18;"
+            );
+            fileTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: white;");
+            fileMeta.setStyle("-fx-font-size: 11px; -fx-text-fill: #d8ecff;");
+        } else {
+            wrapper.setAlignment(Pos.CENTER_LEFT);
+            Label nameLabel = new Label(sender);
+            nameLabel.setStyle("-fx-text-fill: #8e8e93; -fx-font-size: 10px; -fx-padding: 0 0 0 5;");
+            bubbleWrapper.getChildren().add(nameLabel);
+            fileCard.setStyle(
+                "-fx-background-color: #E9E9EB;" +
+                "-fx-background-radius: 18 18 18 2;"
+            );
+        }
+
+        bubbleWrapper.getChildren().add(wrapper);
+        messageContainer.getChildren().add(bubbleWrapper);
+    }
+
+    private Node createFilePreview(String fileName, String fileMimeType, byte[] bytes) {
+        if (fileMimeType == null) {
+            return new Label("Preview tidak tersedia.");
+        }
+
+        if (fileMimeType.startsWith("image/")) {
+            Image image = new Image(new ByteArrayInputStream(bytes), 320, 220, true, true);
+            ImageView imageView = new ImageView(image);
+            imageView.setFitWidth(320);
+            imageView.setPreserveRatio(true);
+            imageView.setSmooth(true);
+            return imageView;
+        }
+
+        if (fileMimeType.startsWith("video/") || fileMimeType.startsWith("audio/")) {
+            return createMediaPreview(fileName, bytes, fileMimeType.startsWith("video/"));
+        }
+
+        Label placeholder = new Label("Preview tidak tersedia untuk tipe file ini.");
+        placeholder.setWrapText(true);
+        placeholder.setStyle("-fx-font-size: 12px; -fx-text-fill: #6e6e73;");
+        return placeholder;
+    }
+
+    private Node createMediaPreview(String fileName, byte[] bytes, boolean video) {
+        VBox mediaBox = new VBox(8);
+        try {
+            File tempFile = Files.createTempFile("chatapp-", getFileExtension(fileName)).toFile();
+            Files.write(tempFile.toPath(), bytes);
+            tempFile.deleteOnExit();
+
+            Media media = new Media(tempFile.toURI().toString());
+            MediaPlayer mediaPlayer = new MediaPlayer(media);
+            Button playBtn = new Button("Play");
+            playBtn.setOnAction(e -> {
+                if (mediaPlayer.getStatus() == MediaPlayer.Status.PLAYING) {
+                    mediaPlayer.pause();
+                    playBtn.setText("Play");
+                } else {
+                    mediaPlayer.play();
+                    playBtn.setText("Pause");
+                }
+            });
+
+            mediaPlayer.setOnEndOfMedia(() -> {
+                mediaPlayer.stop();
+                playBtn.setText("Play");
+            });
+
+            if (video) {
+                MediaView mediaView = new MediaView(mediaPlayer);
+                mediaView.setFitWidth(320);
+                mediaView.setFitHeight(180);
+                mediaView.setPreserveRatio(true);
+                mediaBox.getChildren().add(mediaView);
+            }
+
+            mediaBox.getChildren().add(playBtn);
+            return mediaBox;
+        } catch (IOException | RuntimeException e) {
+            Label errorLabel = new Label("Preview media tidak bisa dibuka.");
+            errorLabel.setWrapText(true);
+            errorLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #6e6e73;");
+            return errorLabel;
+        }
+    }
+
+    private void saveFile(String fileName, byte[] bytes) {
+        String safeFileName = sanitizeFileName(fileName);
+        String extension = getFileExtension(safeFileName);
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Simpan file");
+        fileChooser.setInitialFileName(safeFileName);
+        if (!extension.equals(".tmp")) {
+            fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter(extension.substring(1).toUpperCase() + " File", "*" + extension)
+            );
+        }
+        fileChooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("Semua File", "*.*")
+        );
+
+        File destination = fileChooser.showSaveDialog(getScene().getWindow());
+        if (destination == null) {
+            return;
+        }
+
+        File targetFile = ensureOriginalExtension(destination, extension);
+        try {
+            Files.write(targetFile.toPath(), bytes);
+        } catch (IOException e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR, "Gagal menyimpan file: " + e.getMessage());
+            alert.show();
+        }
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+
+        double kb = bytes / 1024.0;
+        if (kb < 1024) {
+            return String.format("%.1f KB", kb);
+        }
+
+        double mb = kb / 1024.0;
+        return String.format("%.1f MB", mb);
+    }
+
+    private String getFileExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < fileName.length() - 1) {
+            return fileName.substring(dotIndex);
+        }
+        return ".tmp";
+    }
+
+    private File ensureOriginalExtension(File destination, String extension) {
+        if (extension.equals(".tmp")) {
+            return destination;
+        }
+
+        String fileName = destination.getName();
+        if (fileName.toLowerCase().endsWith(extension.toLowerCase())) {
+            return destination;
+        }
+
+        return new File(destination.getParentFile(), fileName + extension);
+    }
+
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return "downloaded-file";
+        }
+
+        return fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 }

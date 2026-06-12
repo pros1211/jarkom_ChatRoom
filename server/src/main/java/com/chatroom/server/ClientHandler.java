@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,8 @@ import com.chatroom.protocol.Packet;
 import com.google.gson.Gson;
 
 public class ClientHandler implements Runnable {
+
+    private static final long MAX_FILE_SIZE_BYTES = 50L * 1024L * 1024L;
 
     private final Socket socket;
     private String currentRoomId;
@@ -35,16 +38,23 @@ public class ClientHandler implements Runnable {
     @Override
     public void run() {
         try {
-            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            writer = new PrintWriter(socket.getOutputStream(), true);
+            socket.setTcpNoDelay(true);
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            writer = new PrintWriter(socket.getOutputStream(), true, StandardCharsets.UTF_8);
 
             String json;
             while ((json = reader.readLine()) != null) {
-                Packet packet = gson.fromJson(json, Packet.class);
-                handlePacket(packet);
+                try {
+                    Packet packet = gson.fromJson(json, Packet.class);
+                    handlePacket(packet);
+                } catch (Exception packetError) {
+                    System.out.println("Packet error from " + username + ": " + packetError.getMessage());
+                    packetError.printStackTrace();
+                }
             }
         } catch (Exception e) {
-            System.out.println("User " + username + " disconnected");
+            System.out.println("User " + username + " disconnected: " + e.getMessage());
+            e.printStackTrace();
             handleLeaveRoom(); // Cleanup if disconnected
         } finally {
             try { socket.close(); } catch (Exception ignored) {}
@@ -52,6 +62,10 @@ public class ClientHandler implements Runnable {
     }
 
     private void handlePacket(Packet packet) {
+        if (packet == null || packet.getType() == null) {
+            return;
+        }
+
         switch (packet.getType()) {
             case LOGIN: handleLogin(packet); break;
             case CREATE_ROOM: handleCreateRoom(packet); break;
@@ -59,6 +73,8 @@ public class ClientHandler implements Runnable {
             case JOIN_ROOM: handleJoinRoom(packet); break;
             case LEAVE_ROOM: handleLeaveRoom(); break;
             case CHAT_MESSAGE: handleChatMessage(packet); break;
+            case FILE_MESSAGE: handleFileMessage(packet); break;
+            case FILE_CHUNK: handleFileChunk(packet); break;
             case KICK_USER: handleKickUser(packet); break;
             case DELETE_ROOM: handleDeleteRoom(packet); break;
         }
@@ -87,6 +103,8 @@ public class ClientHandler implements Runnable {
     private void handleCreateRoom(Packet packet) {
         ChatRoom room = server.getRoomManager().createRoom(packet.getRoomName(), username);
         System.out.println("Room created: " + room.getRoomName() + " by " + username);
+        room.addMember(this);
+        currentRoomId = room.getRoomId();
 
         Packet response = new Packet(MessageType.ROOM_CREATED);
         response.setRoomId(room.getRoomId());
@@ -96,9 +114,7 @@ public class ClientHandler implements Runnable {
         // Broadcast ROOM_LIST ke SEMUA user yang sedang online agar Lobby mereka terupdate otomatis
         broadcastGlobalRoomList();
 
-        // Setelah buat room, otomatis join
-        packet.setRoomId(room.getRoomId());
-        handleJoinRoom(packet);
+        System.out.println(username + " joined " + room.getRoomName());
     }
 
     private void broadcastGlobalRoomList() {
@@ -163,6 +179,47 @@ public class ClientHandler implements Runnable {
         broadcast(room, outgoing);
     }
 
+    private void handleFileMessage(Packet packet) {
+        if (currentRoomId == null) return;
+        ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
+        if (room == null) return;
+        if (packet.getFileSize() > MAX_FILE_SIZE_BYTES) {
+            sendError("Ukuran file maksimal 50 MB.");
+            return;
+        }
+
+        Packet outgoing = new Packet(MessageType.FILE_MESSAGE);
+        outgoing.setUsername(username);
+        outgoing.setFileName(packet.getFileName());
+        outgoing.setFileMimeType(packet.getFileMimeType());
+        outgoing.setFileData(packet.getFileData());
+        outgoing.setFileSize(packet.getFileSize());
+        outgoing.setMessage(packet.getMessage());
+        broadcast(room, outgoing);
+    }
+
+    private void handleFileChunk(Packet packet) {
+        if (currentRoomId == null) return;
+        ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
+        if (room == null) return;
+        if (packet.getFileSize() > MAX_FILE_SIZE_BYTES) {
+            sendError("Ukuran file maksimal 50 MB.");
+            return;
+        }
+
+        Packet outgoing = new Packet(MessageType.FILE_CHUNK);
+        outgoing.setUsername(username);
+        outgoing.setFileId(packet.getFileId());
+        outgoing.setFileName(packet.getFileName());
+        outgoing.setFileMimeType(packet.getFileMimeType());
+        outgoing.setFileData(packet.getFileData());
+        outgoing.setFileSize(packet.getFileSize());
+        outgoing.setChunkIndex(packet.getChunkIndex());
+        outgoing.setTotalChunks(packet.getTotalChunks());
+        outgoing.setMessage(packet.getMessage());
+        broadcast(room, outgoing);
+    }
+
     private void handleKickUser(Packet packet) {
         if (currentRoomId == null) return;
         ChatRoom room = server.getRoomManager().getRoom(currentRoomId);
@@ -207,9 +264,18 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    public void sendPacket(Packet packet) {
+    private void sendError(String message) {
+        Packet errorPacket = new Packet(MessageType.ERROR);
+        errorPacket.setMessage(message);
+        sendPacket(errorPacket);
+    }
+
+    public synchronized void sendPacket(Packet packet) {
         if (writer != null) {
             writer.println(gson.toJson(packet));
+            if (writer.checkError()) {
+                System.out.println("Gagal mengirim packet ke " + username);
+            }
         }
     }
 }

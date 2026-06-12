@@ -4,12 +4,15 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 import com.chatroom.protocol.MessageType;
 import com.chatroom.protocol.Packet;
 import com.google.gson.Gson;
 
 public class ClientHandler implements Runnable {
+
+    private static final long MAX_FILE_SIZE_BYTES = 50L * 1024L * 1024L;
 
     private final Socket socket;
 
@@ -39,32 +42,49 @@ public class ClientHandler implements Runnable {
 
             reader = new BufferedReader(
                     new InputStreamReader(
-                            socket.getInputStream()));
+                            socket.getInputStream(),
+                            StandardCharsets.UTF_8));
 
+            socket.setTcpNoDelay(true);
             writer = new PrintWriter(
                     socket.getOutputStream(),
-                    true);
+                    true,
+                    StandardCharsets.UTF_8);
 
             String json;
 
             while ((json = reader.readLine()) != null) {
 
-                Packet packet = gson.fromJson(
-                        json,
-                        Packet.class);
+                try {
+                    Packet packet = gson.fromJson(
+                            json,
+                            Packet.class);
 
-                handlePacket(packet);
+                    handlePacket(packet);
+                } catch (Exception packetError) {
+                    System.out.println(
+                            "Packet error from "
+                                    + username
+                                    + ": "
+                                    + packetError.getMessage());
+                    packetError.printStackTrace();
+                }
             }
 
         } catch (Exception e) {
 
             System.out.println(
-                    "Client disconnected");
+                    "Client disconnected: "
+                            + e.getMessage());
+            e.printStackTrace();
         }
     }
 
     private void handlePacket(
             Packet packet) {
+
+        if (packet == null || packet.getType() == null)
+            return;
 
         switch (packet.getType()) {
 
@@ -86,6 +106,14 @@ public class ClientHandler implements Runnable {
 
             case CHAT_MESSAGE:
                 handleChatMessage(packet);
+                break;
+
+            case FILE_MESSAGE:
+                handleFileMessage(packet);
+                break;
+
+            case FILE_CHUNK:
+                handleFileChunk(packet);
                 break;
         }
     }
@@ -122,6 +150,8 @@ public class ClientHandler implements Runnable {
         System.out.println(
                 "Room created: "
                         + room.getRoomName());
+        room.addMember(this);
+        currentRoomId = room.getRoomId();
 
         Packet response = new Packet(
                 MessageType.ROOM_CREATED);
@@ -133,6 +163,11 @@ public class ClientHandler implements Runnable {
                 room.getRoomName());
 
         sendPacket(response);
+
+        System.out.println(
+                username
+                        + " joined "
+                        + room.getRoomName());
     }
 
     private void handleJoinRoom(
@@ -202,6 +237,92 @@ public class ClientHandler implements Runnable {
                 outgoing);
     }
 
+    private void handleFileMessage(
+            Packet packet) {
+
+        if (currentRoomId == null)
+            return;
+
+        ChatRoom room = server
+                .getRoomManager()
+                .getRoom(
+                        currentRoomId);
+
+        if (room == null)
+            return;
+
+        if (packet.getFileSize() > MAX_FILE_SIZE_BYTES) {
+            sendError("Ukuran file maksimal 50 MB.");
+            return;
+        }
+
+        Packet outgoing = new Packet(
+                MessageType.FILE_MESSAGE);
+
+        outgoing.setUsername(
+                username);
+        outgoing.setFileName(
+                packet.getFileName());
+        outgoing.setFileMimeType(
+                packet.getFileMimeType());
+        outgoing.setFileData(
+                packet.getFileData());
+        outgoing.setFileSize(
+                packet.getFileSize());
+        outgoing.setMessage(
+                packet.getMessage());
+
+        broadcast(
+                room,
+                outgoing);
+    }
+
+    private void handleFileChunk(
+            Packet packet) {
+
+        if (currentRoomId == null)
+            return;
+
+        ChatRoom room = server
+                .getRoomManager()
+                .getRoom(
+                        currentRoomId);
+
+        if (room == null)
+            return;
+
+        if (packet.getFileSize() > MAX_FILE_SIZE_BYTES) {
+            sendError("Ukuran file maksimal 50 MB.");
+            return;
+        }
+
+        Packet outgoing = new Packet(
+                MessageType.FILE_CHUNK);
+
+        outgoing.setUsername(
+                username);
+        outgoing.setFileId(
+                packet.getFileId());
+        outgoing.setFileName(
+                packet.getFileName());
+        outgoing.setFileMimeType(
+                packet.getFileMimeType());
+        outgoing.setFileData(
+                packet.getFileData());
+        outgoing.setFileSize(
+                packet.getFileSize());
+        outgoing.setChunkIndex(
+                packet.getChunkIndex());
+        outgoing.setTotalChunks(
+                packet.getTotalChunks());
+        outgoing.setMessage(
+                packet.getMessage());
+
+        broadcast(
+                room,
+                outgoing);
+    }
+
     private void broadcast(
             ChatRoom room,
             Packet packet) {
@@ -213,10 +334,28 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private void sendPacket(
+    private void sendError(
+            String message) {
+
+        Packet errorPacket = new Packet(
+                MessageType.ERROR);
+
+        errorPacket.setMessage(
+                message);
+
+        sendPacket(errorPacket);
+    }
+
+    private synchronized void sendPacket(
             Packet packet) {
 
         writer.println(
                 gson.toJson(packet));
+
+        if (writer.checkError()) {
+            System.out.println(
+                    "Gagal mengirim packet ke "
+                            + username);
+        }
     }
 }
