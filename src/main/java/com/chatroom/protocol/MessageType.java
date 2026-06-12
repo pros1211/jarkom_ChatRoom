@@ -19,6 +19,7 @@ public enum MessageType {
     USER_LEFT,
 
     CHAT_MESSAGE,
+    MESSAGE_HISTORY,
     FILE_MESSAGE,
     FILE_CHUNK,
 

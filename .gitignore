@@ -1,4 +1,6 @@
 target/
 client/target/
 server/target/
-*.class
+.class
+uploads/
+server/uploads/

@@ -9,6 +9,8 @@ import com.example.views.ChatView;
 import com.example.views.LobbyView;
 import com.example.views.LoginView;
 import com.example.views.CreateRoomDialog;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -19,10 +21,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class App extends Application {
@@ -35,6 +39,7 @@ public class App extends Application {
     private ChatClient chatClient;
     private LobbyView lobbyView;
     private ChatView chatView;
+    private final Gson gson = new Gson();
     private final Map<String, IncomingFile> incomingFiles = new HashMap<>();
 
     @Override
@@ -231,6 +236,10 @@ public class App extends Application {
                 showChat(newRoom);
                 break;
 
+            case MESSAGE_HISTORY:
+                handleMessageHistory(packet);
+                break;
+
             case CHAT_MESSAGE:
                 if (chatView != null) {
                     chatView.addMessage(packet.getUsername(), packet.getMessage(), packet.getUsername().equals(currentUser));
@@ -291,6 +300,30 @@ public class App extends Application {
                     showLobby();
                 });
                 break;
+        }
+    }
+
+    private void handleMessageHistory(Packet packet) {
+        if (chatView == null || packet.getMessage() == null || packet.getMessage().isEmpty()) {
+            return;
+        }
+
+        Type historyType = new TypeToken<List<HistoryMessage>>() {}.getType();
+        List<HistoryMessage> messages = gson.fromJson(packet.getMessage(), historyType);
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+
+        chatView.addMessage("Sistem", "Riwayat chat dimuat.", false);
+        for (HistoryMessage message : messages) {
+            if (message.content != null && message.content.startsWith("[FILE] ")) {
+                continue;
+            }
+
+            chatView.addMessage(
+                    message.sender,
+                    message.content,
+                    message.sender != null && message.sender.equals(currentUser));
         }
     }
 
@@ -374,6 +407,11 @@ public class App extends Application {
             }
             return outputStream.toByteArray();
         }
+    }
+
+    private static class HistoryMessage {
+        private String sender;
+        private String content;
     }
 
     @Override
